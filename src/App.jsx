@@ -3128,11 +3128,12 @@ function LockedScreen({ id, setScreen, setUser, showToast }) {
 }
 
 /* ═══════════════════════════════════ LOGIN */
-function LoginScreen({ onEnter }) {
+function LoginScreen({ onEnter, onBack }) {
   const [name, setName] = useState("");
   const [niche, setNiche] = useState("comercio");
   const [plan, setPlan] = useState("DIAMANTE");
   const [mounted, setMounted] = useState(false);
+  const nameRef = useRef(null);
   useEffect(()=>{ setTimeout(()=>setMounted(true),80); },[]);
 
   return (
@@ -3147,6 +3148,19 @@ function LoginScreen({ onEnter }) {
 
       <div style={{ width:"100%", maxWidth:380, position:"relative", zIndex:1,
         opacity:mounted?1:0, transform:mounted?"translateY(0)":"translateY(30px)", transition:"all 0.6s ease" }}>
+
+        {/* Botão voltar ao login */}
+        {onBack && (
+          <div style={{ textAlign:"center", marginBottom:16 }}>
+            <button onClick={onBack}
+              style={{ background:"none", border:`1px solid ${C.border}`, color:C.muted,
+                fontSize:12, padding:"7px 16px", borderRadius:100, cursor:"pointer",
+                fontFamily:"'Inter',sans-serif", display:"inline-flex", alignItems:"center", gap:6 }}>
+              ← Voltar para o login
+            </button>
+          </div>
+        )}
+
         {/* Logo */}
         <div style={{ textAlign:"center", marginBottom:32 }}>
           <div style={{ width:56, height:56, borderRadius:16, background:`linear-gradient(135deg,${C.neon},${C.purple})`,
@@ -3171,7 +3185,7 @@ function LoginScreen({ onEnter }) {
           boxShadow:`0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)` }}>
           <label style={{ display:"block", fontSize:10.5, textTransform:"uppercase", letterSpacing:"0.06em",
             color:C.muted, margin:"0 0 6px", fontWeight:700 }}>Seu nome</label>
-          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Como podemos te chamar"
+          <input ref={nameRef} defaultValue={name} onChange={e=>setName(e.target.value)} placeholder="Como podemos te chamar"
             style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, color:C.text,
               borderRadius:10, padding:"12px 14px", fontSize:14, outline:"none", boxSizing:"border-box",
               fontFamily:"'Inter',sans-serif", transition:"border-color 0.2s" }}
@@ -3589,6 +3603,10 @@ export default function App() {
           saveUser(newUser, authUser.id);
           prevRankRef.current = getRank(0).current.name;
           setShowOnboarding(true);
+        }} onBack={async ()=>{
+          await supabase.auth.signOut();
+          setAuthUser(null);
+          setUserRaw(null);
         }}/>
 
       /* ── Sessão + perfil → app normal ── */
