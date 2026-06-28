@@ -1,16 +1,16 @@
-import React, { useState, useRef, useCallback } from "react";
+
+import React, { useState, useRef } from "react";
 import { supabase } from "./supabase.js";
-import { Zap, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Zap, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, Shield } from "lucide-react";
 
 const C = {
   bg:"#080A0F", surface:"#0D0F17", card:"#111420", border:"#1A1D2E",
   text:"#E8EAFF", muted:"#5A5D7A", neon:"#4F6EF7",
   neonGlow:"rgba(79,110,247,0.25)", purple:"#7C3AED",
-  green:"#00E5A0", red:"#FF4757",
+  green:"#00E5A0", red:"#FF4757", amber:"#F59E0B",
 };
 
-/* ── Input sem re-render a cada tecla ─────────────────────────────────── */
-function FastInput({ type, placeholder, inputRef, rightSlot, onFocusChange }) {
+function FastInput({ type, placeholder, inputRef, rightSlot }) {
   const [focused, setFocused] = useState(false);
   return (
     <div style={{ position:"relative", display:"flex", alignItems:"center" }}>
@@ -18,12 +18,12 @@ function FastInput({ type, placeholder, inputRef, rightSlot, onFocusChange }) {
         ref={inputRef}
         type={type}
         placeholder={placeholder}
-        onFocus={() => { setFocused(true); onFocusChange && onFocusChange(true); }}
-        onBlur={() => { setFocused(false); onFocusChange && onFocusChange(false); }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         style={{
           width:"100%", background:C.surface,
           border:`1px solid ${focused ? C.neon : C.border}`,
-          borderRadius:11, padding:`11px 14px 11px 14px`,
+          borderRadius:11, padding:"11px 14px",
           paddingRight: rightSlot ? 42 : 14,
           fontSize:14, color:C.text, outline:"none",
           fontFamily:"'Inter',sans-serif",
@@ -46,10 +46,9 @@ export default function AuthScreen({ onAuthenticated }) {
   const [error, setError]     = useState("");
   const [success, setSuccess] = useState("");
 
-  // Refs para leitura direta — evita re-render a cada tecla
-  const emailRef   = useRef(null);
-  const passwordRef= useRef(null);
-  const confirmRef = useRef(null);
+  const emailRef    = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmRef  = useRef(null);
 
   function switchMode(m) {
     setMode(m); setError(""); setSuccess("");
@@ -68,12 +67,32 @@ export default function AuthScreen({ onAuthenticated }) {
     return msg || "Erro inesperado. Tente novamente.";
   }
 
+  // ── Verifica se email está na tabela clientes_pagos ─────────────────────
+  async function verificarAcesso(email) {
+    const { data, error } = await supabase
+      .from('clientes_pagos')
+      .select('email, plano')
+      .eq('email', email)
+      .maybeSingle();
+    if (error) return null;
+    return data;
+  }
+
   async function handleLogin(e) {
     e.preventDefault();
     const email    = emailRef.current?.value?.trim() || "";
     const password = passwordRef.current?.value || "";
     if (!email || !password) { setError("Preencha e-mail e senha."); return; }
     setLoading(true); setError(""); setSuccess("");
+
+    // Verificar se comprou antes de logar
+    const acesso = await verificarAcesso(email);
+    if (!acesso) {
+      setLoading(false);
+      setError("Acesso não encontrado. Adquira o Vácuo Zero para entrar.");
+      return;
+    }
+
     const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (err) { setError(translateError(err.message)); return; }
@@ -89,6 +108,15 @@ export default function AuthScreen({ onAuthenticated }) {
     if (password.length < 6)             { setError("A senha precisa ter no mínimo 6 caracteres."); return; }
     if (password !== confirm)            { setError("As senhas não coincidem."); return; }
     setLoading(true); setError(""); setSuccess("");
+
+    // Verificar se comprou antes de cadastrar
+    const acesso = await verificarAcesso(email);
+    if (!acesso) {
+      setLoading(false);
+      setError("Acesso não encontrado. Adquira o Vácuo Zero para criar sua conta.");
+      return;
+    }
+
     const { data, error: err } = await supabase.auth.signUp({ email, password });
     setLoading(false);
     if (err) { setError(translateError(err.message)); return; }
@@ -127,7 +155,6 @@ export default function AuthScreen({ onAuthenticated }) {
       padding:"24px 16px", position:"relative", overflow:"hidden",
       fontFamily:"'Inter',sans-serif",
     }}>
-      {/* Orbs */}
       <div style={{ position:"absolute", borderRadius:"50%", filter:"blur(100px)",
         width:500, height:500, top:-150, left:-100, pointerEvents:"none",
         background:"radial-gradient(circle, rgba(79,110,247,0.15) 0%, transparent 70%)" }}/>
@@ -150,9 +177,16 @@ export default function AuthScreen({ onAuthenticated }) {
           <span style={{ fontFamily:"'Space Grotesk',sans-serif", fontSize:20, fontWeight:800, color:C.text }}>Vácuo Zero</span>
         </div>
 
+        {/* Badge acesso exclusivo */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+          padding:"6px 14px", background:`${C.amber}10`, border:`1px solid ${C.amber}25`,
+          borderRadius:100, marginBottom:24 }}>
+          <Shield size={12} color={C.amber}/>
+          <span style={{ fontSize:11, color:C.amber, fontWeight:600 }}>Acesso exclusivo para clientes</span>
+        </div>
+
         {/* ── LOGIN / CADASTRO ── */}
         {mode !== "reset" && (<>
-          {/* Tabs */}
           <div style={{ display:"flex", background:C.surface, border:`1px solid ${C.border}`,
             borderRadius:12, padding:4, marginBottom:28, gap:4 }}>
             {["login","signup"].map(m => (
@@ -173,10 +207,10 @@ export default function AuthScreen({ onAuthenticated }) {
             {mode === "login" ? "Bem-vindo de volta" : "Crie sua conta"}
           </h1>
           <p style={{ fontSize:14, color:C.muted, textAlign:"center", marginBottom:28, lineHeight:1.6 }}>
-            {mode === "login" ? "Entre para acessar seu painel de vendas." : "Comece a recuperar leads em menos de 5 minutos."}
+            {mode === "login" ? "Entre com o e-mail usado na compra." : "Use o e-mail com que você comprou."}
           </p>
 
-          {error   && (
+          {error && (
             <div style={{ background:"rgba(255,71,87,0.08)", border:"1px solid rgba(255,71,87,0.25)",
               borderRadius:10, padding:"11px 14px", display:"flex", alignItems:"flex-start", gap:10,
               marginBottom:18, fontSize:13, color:C.red, lineHeight:1.5 }}>
@@ -192,13 +226,11 @@ export default function AuthScreen({ onAuthenticated }) {
 
           <form onSubmit={mode === "login" ? handleLogin : handleSignup}
             style={{ display:"flex", flexDirection:"column", gap:16 }}>
-
             <div>
               <label style={{ fontSize:12, fontWeight:600, color:C.muted, display:"block",
-                marginBottom:7, letterSpacing:"0.04em", textTransform:"uppercase" }}>E-mail</label>
+                marginBottom:7, letterSpacing:"0.04em", textTransform:"uppercase" }}>E-mail da compra</label>
               <FastInput type="email" placeholder="seu@email.com" inputRef={emailRef}/>
             </div>
-
             <div>
               <label style={{ fontSize:12, fontWeight:600, color:C.muted, display:"block",
                 marginBottom:7, letterSpacing:"0.04em", textTransform:"uppercase" }}>Senha</label>
@@ -209,7 +241,6 @@ export default function AuthScreen({ onAuthenticated }) {
                 rightSlot={eyeBtn(showPw, () => setShowPw(v => !v))}
               />
             </div>
-
             {mode === "signup" && (
               <div>
                 <label style={{ fontSize:12, fontWeight:600, color:C.muted, display:"block",
@@ -222,7 +253,6 @@ export default function AuthScreen({ onAuthenticated }) {
                 />
               </div>
             )}
-
             <button type="submit" disabled={loading}
               style={{ width:"100%", padding:"13px",
                 background: loading ? C.muted : `linear-gradient(135deg, ${C.neon}, ${C.purple})`,
@@ -233,7 +263,7 @@ export default function AuthScreen({ onAuthenticated }) {
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
                 transition:"all 0.15s", marginTop:4 }}>
               {loading
-                ? <><Loader2 size={16} style={{ animation:"spin 0.7s linear infinite" }}/> Aguarde...</>
+                ? <><Loader2 size={16} style={{ animation:"spin 0.7s linear infinite" }}/> Verificando acesso...</>
                 : mode === "login" ? "Entrar →" : "Criar conta →"
               }
             </button>
@@ -249,19 +279,26 @@ export default function AuthScreen({ onAuthenticated }) {
               </button>
             </div>
           )}
+
+          {/* Link para comprar */}
+          <div style={{ textAlign:"center", marginTop:20, padding:"12px 14px",
+            background:`${C.neon}06`, border:`1px solid ${C.neon}20`, borderRadius:10 }}>
+            <p style={{ fontSize:12, color:C.muted, margin:"0 0 8px" }}>Ainda não tem acesso?</p>
+            <a href="https://vacuo-zero-landing.vercel.app" target="_blank"
+              style={{ fontSize:13, fontWeight:700, color:C.neon, textDecoration:"none" }}>
+              Adquirir o Vácuo Zero →
+            </a>
+          </div>
         </>)}
 
-        {/* ── RECUPERAÇÃO DE SENHA ── */}
+        {/* ── RECUPERAÇÃO ── */}
         {mode === "reset" && (<>
           <h1 style={{ fontFamily:"'Space Grotesk',sans-serif", fontSize:24, fontWeight:800,
-            color:C.text, textAlign:"center", marginBottom:8, letterSpacing:"-0.02em" }}>
-            Recuperar senha
-          </h1>
+            color:C.text, textAlign:"center", marginBottom:8 }}>Recuperar senha</h1>
           <p style={{ fontSize:14, color:C.muted, textAlign:"center", marginBottom:28, lineHeight:1.6 }}>
-            Digite seu e-mail e enviaremos um link para redefinir sua senha.
+            Digite o e-mail usado na compra.
           </p>
-
-          {error   && (
+          {error && (
             <div style={{ background:"rgba(255,71,87,0.08)", border:"1px solid rgba(255,71,87,0.25)",
               borderRadius:10, padding:"11px 14px", display:"flex", gap:10,
               marginBottom:18, fontSize:13, color:C.red }}>
@@ -274,7 +311,6 @@ export default function AuthScreen({ onAuthenticated }) {
               ✓ {success}
             </div>
           )}
-
           {!success && (
             <form onSubmit={handleReset} style={{ display:"flex", flexDirection:"column", gap:16 }}>
               <div>
@@ -296,7 +332,6 @@ export default function AuthScreen({ onAuthenticated }) {
               </button>
             </form>
           )}
-
           <div style={{ textAlign:"center", marginTop:20 }}>
             <button onClick={() => switchMode("login")}
               style={{ background:"none", border:"none", cursor:"pointer",
